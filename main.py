@@ -1,9 +1,29 @@
 """Main file for running the ImageNet experiments."""
 
+import os
+
 import jax
 
-jax.distributed.initialize()
-
+# Distributed init is only needed for multi-process (multi-node) runs,
+# On a single local GPU we skip it entirely: there is no
+# cluster manager for jax to auto-detect, and jax uses the local device(s) directly.
+if os.environ.get("JAX_COORDINATOR_ADDRESS"):
+    # Explicit launch: export these in your job script (one process per node).
+    # For one-process-per-GPU, also pass local_device_ids=[<gpu_index>].
+    jax.distributed.initialize(
+        coordinator_address=os.environ["JAX_COORDINATOR_ADDRESS"],
+        num_processes=int(os.environ["JAX_NUM_PROCESSES"]),
+        process_id=int(os.environ["JAX_PROCESS_ID"]),
+    )
+    print(f"JAX distributed initialised: {jax.process_index()}/{jax.process_count()}")
+elif os.environ.get("SLURM_JOB_ID"):
+    # SLURM auto-detects coordinator/num_processes/process_id from SLURM_* env vars.
+    jax.distributed.initialize()
+    print(
+        f"JAX distributed initialised (SLURM): {jax.process_index()}/{jax.process_count()}"
+    )
+else:
+    print("Single-process mode: skipping jax.distributed.initialize().")
 from absl import app, flags
 from ml_collections import config_flags
 
