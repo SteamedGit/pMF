@@ -9,9 +9,11 @@ import numpy as np
 import jax.numpy as jnp
 import torch
 from PIL import Image
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
+import safetensors
 from torch.utils.data.distributed import DistributedSampler
 from torchvision import datasets
+import shutil
 
 from utils.logging_util import log_for_0
 
@@ -20,8 +22,10 @@ CROP_PADDING = 32
 MEAN_RGB = [0.485, 0.456, 0.406]
 STDDEV_RGB = [0.229, 0.224, 0.225]
 
+
 def loader(path: str):
     return pil_loader(path)
+
 
 def process_image_on_tpu(image, use_flip=True, flip_key=None):
     """
@@ -87,7 +91,7 @@ def process_batch_on_tpu(batch_dict, use_flip=True, rng_key=None):
         processed_images = jax.vmap(lambda img: process_image_on_tpu(img, False, None))(
             images
         )
-    
+
     return {
         "image": processed_images,
         "label": labels,
@@ -171,7 +175,9 @@ def worker_init_fn(worker_id, rank):
     random.seed(seed)
     np.random.seed(seed)
 
+
 from torchvision.datasets.folder import pil_loader
+
 
 def create_imagenet_split(dataset_cfg, batch_size, split):
     """
@@ -186,6 +192,7 @@ def create_imagenet_split(dataset_cfg, batch_size, split):
       steps_per_epoch: Number of steps to loop through the DataLoader.
     """
     rank = jax.process_index()
+
     # Create a loader that applies center crop on CPU
     # This is necessary to ensure all images have uniform size for batching
     def loader_with_crop(path: str):
@@ -194,12 +201,67 @@ def create_imagenet_split(dataset_cfg, batch_size, split):
         return np.array(img_cropped)  # Returns uint8 array (image_size, image_size, C)
 
     root = os.path.join(dataset_cfg.root, split)
-    
+
     ds = datasets.ImageFolder(
         root,
         transform=None,  # No transforms - crop is done in loader
         loader=loader_with_crop,  # Returns uint8 numpy arrays (image_size, image_size, 3)
     )
+    log_for_0(ds)
+    sampler = DistributedSampler(
+        ds,
+        num_replicas=jax.process_count(),
+        rank=rank,
+        shuffle=True,
+    )
+    it = DataLoader(
+        ds,
+        batch_size=batch_size,
+        drop_last=True,
+        worker_init_fn=partial(worker_init_fn, rank=rank),
+        sampler=sampler,
+        num_workers=dataset_cfg.num_workers,
+        prefetch_factor=(
+            dataset_cfg.prefetch_factor if dataset_cfg.num_workers > 0 else None
+        ),
+        pin_memory=dataset_cfg.pin_memory,
+        persistent_workers=True if dataset_cfg.num_workers > 0 else False,
+    )
+    steps_per_epoch = len(it)
+    return it, steps_per_epoch
+
+
+class PixelSafetensorsDataset(Dataset):
+    def __init__(self, path: str):
+        self.path = path
+        self.f = safetensors.safe_open(path, framework="pt")
+        self.length = int(self.f.get_slice("x1").get_shape()[0])
+
+    def __len__(self) -> int:
+        return self.length
+
+    def __getitem__(self, i: int):
+        # Return uint8 HWC [0,255], matching create_imagenet_split's output, so
+        # the existing prepare_batch_data + process_batch_on_tpu path (which
+        # expects channels-last uint8 and does the /255, [-1,1] normalization and
+        # random flip on-device) works unchanged.
+        x1 = self.f.get_slice("x1")[i]  # (H, W, C) uint8, HWC
+        label = self.f.get_slice("label")[i]
+        return x1, label
+
+
+def create_safetensors_dataloader(dataset_cfg, batch_size):
+    rank = jax.process_index()
+
+    src = dataset_cfg.path
+    dst = os.path.join("/dev/shm", os.path.basename(src))
+    if not os.path.exists(dst):
+        tmp = f"{dst}.tmp.{os.getpid()}"
+        shutil.copy2(src, tmp)
+        os.replace(tmp, dst)
+        log_for_0("Staged %s -> %s", src, dst)
+
+    ds = PixelSafetensorsDataset(dst)
     log_for_0(ds)
     sampler = DistributedSampler(
         ds,
