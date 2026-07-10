@@ -1,0 +1,75 @@
+# Generic pMF-S/2 training config (model: pmfDiT_S_2, input_size=64).
+#
+# Machine-specific fields have working local defaults but are meant to be
+# overridden per run/host on the command line. ANY existing leaf can be
+# overridden with --config.<section>.<key>=<value>, e.g.:
+#
+#   uv run main.py --workdir=logs/s2 --config=configs/load_config.py:S_2 \
+#       --config.dataset.path=/data/imagenet-64x64.safetensors \
+#       --config.training.batch_size=512 \
+#       --config.fid.cache_ref=/data/imagenet64_fid_stats.npz
+#
+# Common overrides: dataset.path, dataset.source, fid.cache_ref, fid.enable,
+# training.batch_size, training.num_epochs.
+
+dataset:
+    source: safetensors                                    # "safetensors" (single file) or "folder" (ImageFolder)
+    path: null # override per host
+    root: ''                                               # used only when source == "folder"
+    image_size: 64                                         # must match pmfDiT_S_2 input_size
+
+model:
+    model_str: pmfDiT_S_2
+    cfg_beta: 1.0
+
+    P_mean: 0.8
+    P_std: 0.8
+    noise_scale: 1.0
+
+    lpips: False            # perceptual aux loss — enable on the cluster if wanted
+    lpips_lambda: 0.4
+    convnext: False
+    convnext_lambda: 0.1
+    perceptual_max_t: 0.8
+
+training:
+    log_per_step: 100
+    checkpoint_per_epoch: 20
+
+    num_epochs: 320
+    batch_size: 256         # override per host (e.g. larger on H200, smaller locally)
+    learning_rate: 0.001    # for muon
+    warmup_epochs: 0
+
+    adam_b2: 0.95
+    # multiple ema
+    ema_type: 'edm'
+    ema_val: [500, 1000, 2000]
+
+    sample_per_epoch: 5
+    fid_per_epoch: 10
+
+    seed: 42
+
+fid:
+    enable: True            # override to False to skip FID (e.g. quick local runs)
+    device_batch_size: 40
+    num_samples: 50000
+    cache_ref: null  # override per host
+
+sampling:
+    # sample parameters evaluated during training
+    num_steps: 1
+    omega: 8.5
+    t_min: 0.1
+    t_max: 0.7
+
+logging:
+    use_wandb: False # set to True to use wandb
+    wandb_project: 'YOUR PROJECT' # change to your wandb project
+    wandb_entity: 'YOUR ENTITY' # paste your wandb entity here
+    wandb_tags: # use your own tags
+        - YOUR TAGS
+    wandb_notes: 'YOUR NOTES' # your wandb notes
+
+load_from: ''
