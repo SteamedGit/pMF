@@ -12,6 +12,8 @@ def get_config():
     config.dataset = dataset = ml_collections.ConfigDict()
 
     dataset.root = ""
+    dataset.source = "folder"  # "folder" = ImageFolder on disk; "safetensors" = single .safetensors file
+    dataset.path = ""  # path to the .safetensors file (used when source == "safetensors")
 
     dataset.num_workers = 8
     dataset.prefetch_factor = 4
@@ -73,6 +75,7 @@ def get_config():
     # ------------------------------------------------------------
     # FID
     config.fid = fid = ml_collections.ConfigDict()
+    fid.enable = True  # set False to skip FID during training (e.g. local debugging)
     fid.num_samples = 50000
     fid.device_batch_size = 40
     fid.cache_ref = ""

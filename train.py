@@ -117,11 +117,17 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str) -> Train
     log_for_0("jax.local_device_count: {}".format(jax.local_device_count()))
 
     ########### Create DataLoaders ###########
-    train_loader, steps_per_epoch = input_pipeline.create_imagenet_split(
-        config.dataset,
-        local_batch_size,
-        split="train",
-    )
+    if config.dataset.source == "safetensors":
+        train_loader, steps_per_epoch = input_pipeline.create_safetensors_dataloader(
+            config.dataset,
+            local_batch_size,
+        )
+    else:
+        train_loader, steps_per_epoch = input_pipeline.create_imagenet_split(
+            config.dataset,
+            local_batch_size,
+            split="train",
+        )
     use_flip = config.dataset.use_flip
     log_for_0("Steps per Epoch: {}".format(steps_per_epoch))
 
@@ -200,7 +206,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str) -> Train
     _ = p_sample_step.lower({'params': state.params}, sample_idx=vis_sample_idx, **sample_kwargs).compile()
     log_for_0(f'Sampling step compiled in {timer}')
 
-    fid_evaluator = get_fid_evaluator(config, writer)
+    if config.fid.enable:
+        fid_evaluator = get_fid_evaluator(config, writer)
+    else:
+        fid_evaluator = None
+        log_for_0("config.fid.enable=False: skipping FID evaluator setup.")
 
     ########### Training Loop ###########
     metrics_tracker = MetricsTracker()
@@ -259,8 +269,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str) -> Train
             save_checkpoint(state, workdir)
 
         ########### FID ###########
-        if (epoch + 1) % config.training.fid_per_epoch == 0 \
-            or (epoch + 1) == config.training.num_epochs:
+        if config.fid.enable and (
+            (epoch + 1) % config.training.fid_per_epoch == 0
+            or (epoch + 1) == config.training.num_epochs
+        ):
             fid_evaluator(state, p_sample_step, step, **sample_kwargs)
     
     # Wait until computations are done before exiting
