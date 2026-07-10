@@ -174,7 +174,7 @@ class pmfDiT(nn.Module):
         self.x_embedder = BottleneckPatchEmbedder(
             self.input_size,
             self.patch_size,
-            128 if self.hidden_size <= 1024 else 256, # pca channels. 256 for H/G
+            128 if self.hidden_size <= 1024 else 256,  # pca channels. 256 for H/G
             self.in_channels,
             self.hidden_size,
             bias=True,
@@ -271,9 +271,17 @@ class pmfDiT(nn.Module):
         self.u_final_layer = FinalLayer(
             self.hidden_size, self.patch_size, self.out_channels
         )
-        self.v_final_layer = FinalLayer(
-            self.hidden_size, self.patch_size, self.out_channels
-        ) if not self.eval else lambda x: jnp.zeros((x.shape[0], x.shape[1], self.patch_size * self.patch_size * self.out_channels))
+        self.v_final_layer = (
+            FinalLayer(self.hidden_size, self.patch_size, self.out_channels)
+            if not self.eval
+            else lambda x: jnp.zeros(
+                (
+                    x.shape[0],
+                    x.shape[1],
+                    self.patch_size * self.patch_size * self.out_channels,
+                )
+            )
+        )
 
     def unpatchify(self, x):
         c = self.out_channels
@@ -299,7 +307,7 @@ class pmfDiT(nn.Module):
             w: CFG scale
             t_min, t_max: CFG interval
             y: Class labels
-        
+
         Returns:
             seq: Token sequence for the transformer
         """
@@ -344,7 +352,7 @@ class pmfDiT(nn.Module):
             w: CFG scale
             t_min, t_max: CFG interval
             y: Class labels
-        
+
         Returns:
             u: Average velocity field
             v: Instantaneous velocity field
@@ -384,13 +392,19 @@ class pmfDiT(nn.Module):
 
 
 def precompute_rope_freqs_2d(dim: int, seq_len: int, theta: float = 10000.0):
-    dim = dim // 2 # for 2d rotary embeddings
-    T = int(seq_len ** 0.5)
+    dim = dim // 2  # for 2d rotary embeddings
+    T = int(seq_len**0.5)
     freqs = 1.0 / (theta ** (jnp.arange(0, dim, 2, dtype=jnp.float32) / dim))
     positions = jnp.arange(T, dtype=jnp.float32)
-    freqs_h = jnp.einsum('i,j->ij', positions, freqs)
-    freqs_w = jnp.einsum('i,j->ij', positions, freqs)
-    freqs = jnp.concatenate([jnp.tile(freqs_h[:, None, :], (1, T, 1)), jnp.tile(freqs_w[None, :, :], (T, 1, 1))], axis=-1)  # (T, T, 2D)
+    freqs_h = jnp.einsum("i,j->ij", positions, freqs)
+    freqs_w = jnp.einsum("i,j->ij", positions, freqs)
+    freqs = jnp.concatenate(
+        [
+            jnp.tile(freqs_h[:, None, :], (1, T, 1)),
+            jnp.tile(freqs_w[None, :, :], (T, 1, 1)),
+        ],
+        axis=-1,
+    )  # (T, T, 2D)
     real = jnp.cos(freqs).reshape(seq_len, dim)
     imag = jnp.sin(freqs).reshape(seq_len, dim)
     return jax.lax.complex(real, imag)
@@ -409,6 +423,17 @@ def apply_rotary_pos_emb(x, freqs_cis):
 #################################################################################
 #                                   pMF Configs                                 #
 #################################################################################
+
+pmfDiT_tiny = partial(
+    pmfDiT,
+    input_size=64,
+    depth=4,
+    hidden_size=32,
+    patch_size=16,
+    num_heads=4,
+    aux_head_depth=2,
+)
+
 
 pmfDiT_B_16 = partial(
     pmfDiT,
