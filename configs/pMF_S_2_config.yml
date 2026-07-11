@@ -4,7 +4,7 @@
 # overridden per run/host on the command line. ANY existing leaf can be
 # overridden with --config.<section>.<key>=<value>, e.g.:
 #
-#   uv run main.py --workdir=logs/s2 --config=configs/load_config.py:S_2 \
+#   uv run main.py --workdir=logs/s2 --config=configs/load_config.py:pmf_S_2 \
 #       --config.dataset.path=/data/imagenet-64x64.safetensors \
 #       --config.training.batch_size=512 \
 #       --config.fid.cache_ref=/data/imagenet64_fid_stats.npz
@@ -14,7 +14,7 @@
 
 dataset:
     source: safetensors                                    # "safetensors" (single file) or "folder" (ImageFolder)
-    path: null # override per host
+    path: '' # set here or override per host with --config.dataset.path=...
     root: ''                                               # used only when source == "folder"
     image_size: 64                                         # must match pmfDiT_S_2 input_size
 
@@ -55,7 +55,7 @@ fid:
     enable: True            # override to False to skip FID (e.g. quick local runs)
     device_batch_size: 40
     num_samples: 50000
-    cache_ref: null  # override per host
+    cache_ref: '' # set here or override per host with --config.fid.cache_ref=...
 
 sampling:
     # sample parameters evaluated during training
