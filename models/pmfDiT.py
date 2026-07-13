@@ -445,6 +445,17 @@ pmfDiT_S_2 = partial(
     aux_head_depth=8,
 )
 
+pmfDiT_B_2 = partial(
+    pmfDiT,
+    input_size=64,
+    depth=16,
+    hidden_size=768,
+    patch_size=2,
+    num_heads=12,
+    aux_head_depth=8,
+)
+
+
 pmfDiT_B_16 = partial(
     pmfDiT,
     input_size=256,
