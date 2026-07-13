@@ -1,6 +1,7 @@
 import logging as _logging
 import time, os
 import shutil
+import tempfile
 
 import jax
 from absl import logging
@@ -124,12 +125,13 @@ class Writer:
         self.use_wandb = config.logging.use_wandb
 
         if self.use_wandb:
+            self.wandb_dir = tempfile.gettempdir()
             wandb.init(
                 project=config.logging.wandb_project,
                 entity=config.logging.wandb_entity if config.logging.wandb_entity else None,
                 notes=config.logging.wandb_notes if config.logging.wandb_notes else None,
                 tags=config.logging.wandb_tags if config.logging.wandb_tags else None,
-                dir="/tmp",  # avoid writing to workdir
+                dir=self.wandb_dir,  # avoid writing to workdir
                 settings=wandb.Settings(_service_wait=60),
                 **kwargs,
             )
@@ -182,4 +184,4 @@ class Writer:
             return
         if self.use_wandb:
             wandb.finish()
-            shutil.rmtree("/tmp/wandb", ignore_errors=True)
+            shutil.rmtree(os.path.join(self.wandb_dir, "wandb"), ignore_errors=True)
