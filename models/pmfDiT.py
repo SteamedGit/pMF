@@ -5,8 +5,8 @@ import jax
 import jax.numpy as jnp
 from flax import linen as nn
 
-from models.embedder import TimestepEmbedder, LabelEmbedder, BottleneckPatchEmbedder
-from models.torch_models import TorchLinear, RMSNorm, SwiGLUMlp
+from models.embedder import BottleneckPatchEmbedder, LabelEmbedder, TimestepEmbedder
+from models.torch_models import RMSNorm, SwiGLUMlp, TorchLinear
 
 
 def unsqueeze(t, dim):
@@ -440,7 +440,7 @@ pmfDiT_S_2 = partial(
     input_size=64,
     depth=16,
     hidden_size=384,
-    patch_size=16,
+    patch_size=2,
     num_heads=6,
     aux_head_depth=8,
 )
@@ -451,6 +451,16 @@ pmfDiT_B_2 = partial(
     depth=16,
     hidden_size=768,
     patch_size=2,
+    num_heads=12,
+    aux_head_depth=8,
+)
+
+pmfDiT_B_4 = partial(
+    pmfDiT,
+    input_size=64,
+    depth=16,
+    hidden_size=768,
+    patch_size=4,
     num_heads=12,
     aux_head_depth=8,
 )
